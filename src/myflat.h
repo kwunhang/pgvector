@@ -32,6 +32,14 @@
 #define MYFLAT_MAX_RANDOM_RATIO		100
 #define MYFLAT_DEFAULT_RANDOM_RATIO	50
 
+/* Build phases */
+/* PROGRESS_CREATEIDX_SUBPHASE_INITIALIZE is 1  */
+#define PROGRESS_MYFLAT_PHASE_LOAD	2
+
+#define MYFLAT_SCAN_SIZE	(sizeof(MyflatScanData) )
+
+#define MyflatPageGetOpaque(page) ((MyflatPageOpaque) PageGetSpecialPointer(page))
+
 /* Variables */
 extern int	myflat_random_ratio;
 extern int  myflat_max_random_ratio;
@@ -50,6 +58,12 @@ typedef struct MyflatOptions
 	int			unused;			/* unused variable */
 }			MyflatOptions;
 
+
+typedef struct ListInfo
+{
+	BlockNumber blkno;
+	OffsetNumber offno;
+}			ListInfo;
 
 // use in buildstate for parallel use
 // typedef struct MyflatLeader
@@ -96,7 +110,7 @@ typedef struct MyflatBuildState
 	/* Variables */
 	// VectorArray samples;
 	// VectorArray centers;
-	// ListInfo   *listInfo;
+	ListInfo   *listInfo;
 
 	/* Sampling */
 	// BlockSamplerData bs;
@@ -104,15 +118,15 @@ typedef struct MyflatBuildState
 	// int			rowstoskip;
 
 	/* Sorting */
-	// Tuplesortstate *sortstate;
-	// TupleDesc	sortdesc;
-	// TupleTableSlot *slot;
+	Tuplesortstate *sortstate;
+	TupleDesc	sortdesc;
+	TupleTableSlot *slot;
 
 	/* Memory */
 	MemoryContext tmpCtx;
 
 	/* Parallel builds */
-	// MyflatLeader *myflatleader;
+	MyflatLeader *myflatleader;
 }			MyflatBuildState;
 
 
@@ -134,6 +148,42 @@ typedef struct MyflatPageOpaqueData
 }			MyflatPageOpaqueData;
 
 typedef MyflatPageOpaqueData * MyflatPageOpaque;
+
+typedef struct MyflatScanData
+{
+	BlockNumber startPage;
+	BlockNumber insertPage;
+}			MyflatScanData;
+
+typedef MyflatScanData * MyflatScan;
+
+typedef struct MyflatScanOpaqueData
+{
+	const		MyflatTypeInfo *typeInfo;
+	int			dimensions;
+	bool		first;
+	Datum		value;
+	MemoryContext tmpCtx;
+
+	/* Sorting */
+	Tuplesortstate *sortstate;
+	TupleDesc	tupdesc;
+	TupleTableSlot *vslot;
+	TupleTableSlot *mslot;
+	BufferAccessStrategy bas;
+
+	/* Support functions */
+	FmgrInfo   *procinfo;
+	FmgrInfo   *normprocinfo;
+	Oid			collation;
+	Datum		(*distfunc) (FmgrInfo *flinfo, Oid collation, Datum arg1, Datum arg2);
+
+	/* Lists */
+	pairingheap *listQueue;
+	BlockNumber *listPages;
+}			MyflatScanOpaqueData;
+
+typedef MyflatScanOpaqueData * MyflatScanOpaque;
 
 /* Methods */
 
