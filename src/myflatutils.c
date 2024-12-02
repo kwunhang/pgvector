@@ -10,7 +10,6 @@
 #include "storage/bufmgr.h"
 
 
-
 /*
  * Get the "unused" in the index
  */
@@ -25,6 +24,36 @@ MyflatGetUnused(Relation index)
 	return MYFLAT_DEFAULT_RANDOM_RATIO;
 }
 
+
+/*
+ * Get proc
+ */
+FmgrInfo *
+MyflatOptionalProcInfo(Relation index, uint16 procnum)
+{
+	if (!OidIsValid(index_getprocid(index, 1, procnum)))
+		return NULL;
+
+	return index_getprocinfo(index, 1, procnum);
+}
+
+/*
+ * Normalize value
+ */
+Datum
+MyflatNormValue(const MyflatTypeInfo * typeInfo, Oid collation, Datum value)
+{
+	return DirectFunctionCall1Coll(typeInfo->normalize, collation, value);
+}
+
+/*
+ * Check if non-zero norm
+ */
+bool
+MyflatCheckNorm(FmgrInfo *procinfo, Oid collation, Datum value)
+{
+	return DatumGetFloat8(FunctionCall1Coll(procinfo, collation, value)) > 0;
+}
 
 /*
  * New buffer
@@ -103,29 +132,29 @@ MyflatAppendPage(Relation index, Buffer *buf, Page *page, GenericXLogState **sta
 /*
  * Get the metapage info
  */
-// void
-// IvfflatGetMetaPageInfo(Relation index, int *lists, int *dimensions)
-// {
-// 	Buffer		buf;
-// 	Page		page;
-// 	IvfflatMetaPage metap;
+void
+MyflatGetMetaPageInfo(Relation index, int *unused, int *dimensions)
+{
+	Buffer		buf;
+	Page		page;
+	MyflatMetaPage metap;
 
-// 	buf = ReadBuffer(index, IVFFLAT_METAPAGE_BLKNO);
-// 	LockBuffer(buf, BUFFER_LOCK_SHARE);
-// 	page = BufferGetPage(buf);
-// 	metap = IvfflatPageGetMeta(page);
+	buf = ReadBuffer(index, MYFLAT_METAPAGE_BLKNO);
+	LockBuffer(buf, BUFFER_LOCK_SHARE);
+	page = BufferGetPage(buf);
+	metap = MyflatPageGetMeta(page);
 
-// 	if (unlikely(metap->magicNumber != IVFFLAT_MAGIC_NUMBER))
-// 		elog(ERROR, "ivfflat index is not valid");
+	if (unlikely(metap->magicNumber != MYFLAT_MAGIC_NUMBER))
+		elog(ERROR, "myflat index is not valid");
 
-// 	if (lists != NULL)
-// 		*lists = metap->lists;
+	if (unused != NULL)
+		*unused = metap->unused;
 
-// 	if (dimensions != NULL)
-// 		*dimensions = metap->dimensions;
+	if (dimensions != NULL)
+		*dimensions = metap->dimensions;
 
-// 	UnlockReleaseBuffer(buf);
-// }
+	UnlockReleaseBuffer(buf);
+}
 
 
 

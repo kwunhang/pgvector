@@ -23,9 +23,17 @@
 
 #define MYFLAT_MAX_DIM 2000
 /* Support functions */
+#define MYFLAT_DISTANCE_PROC 1
+#define MYFLAT_NORM_PROC 2
+#define MY_TYPE_INFO_PROC 3 /* for regconize bit, half vec, sparse vec */
+
 #define MYFLAT_VERSION	1
 #define MYFLAT_MAGIC_NUMBER 0x2BCA1387
 #define MYFLAT_PAGE_ID	0xFFAC
+
+/* Preserved page numbers */
+#define MYFLAT_METAPAGE_BLKNO	0
+#define MYFLAT_HEAD_BLKNO		1	/* scan page */
 
 /* MYFFlat parameters */
 #define MYFLAT_MIN_RANDOM_RATIO		1
@@ -38,7 +46,23 @@
 
 #define MYFLAT_SCAN_SIZE	(sizeof(MyflatScanData) )
 
-#define MyflatPageGetOpaque(page) ((MyflatPageOpaque) PageGetSpecialPointer(page))
+#define MyflatPageGetOpaque(page)	((MyflatPageOpaque) PageGetSpecialPointer(page))
+#define MyflatPageGetMeta(page)		((MyflatMetaPage *) PageGetContents(page))
+
+#ifdef MYFLAT_BENCH
+#define MyflatBench(name, code) \
+	do { \
+		instr_time	start; \
+		instr_time	duration; \
+		INSTR_TIME_SET_CURRENT(start); \
+		(code); \
+		INSTR_TIME_SET_CURRENT(duration); \
+		INSTR_TIME_SUBTRACT(duration, start); \
+		elog(INFO, "%s: %.3f ms", name, INSTR_TIME_GET_MILLISEC(duration)); \
+	} while (0)
+#else
+#define MyflatBench(name, code) (code)
+#endif
 
 /* Variables */
 extern int	myflat_random_ratio;
@@ -157,6 +181,15 @@ typedef struct MyflatScanData
 
 typedef MyflatScanData * MyflatScan;
 
+
+typedef struct MyflatScanList
+{
+	pairingheap_node ph_node;
+	BlockNumber startPage;
+	double		distance;
+}			MyflatScanList;
+
+
 typedef struct MyflatScanOpaqueData
 {
 	const		MyflatTypeInfo *typeInfo;
@@ -186,6 +219,19 @@ typedef struct MyflatScanOpaqueData
 typedef MyflatScanOpaqueData * MyflatScanOpaque;
 
 /* Methods */
+FmgrInfo 	*MyflatOptionalProcInfo(Relation index, uint16 procnum);
+Datum		MyflatNormValue(const MyflatTypeInfo * typeInfo, Oid collation, Datum value);
+bool 		MyflatCheckNorm(FmgrInfo *procinfo, Oid collation, Datum value);
+int			MyflatGetUnused(Relation index);
+void		MyflatGetMetaPageInfo(Relation index, int *unused, int *dimensions);
+void		MyflatUpdateScan(Relation index, ListInfo listInfo, BlockNumber insertPage, BlockNumber originalInsertPage, BlockNumber startPage, ForkNumber forkNum);
+void		MyflatCommitBuffer(Buffer buf, GenericXLogState *state);
+void		MyflatAppendPage(Relation index, Buffer *buf, Page *page, GenericXLogState **state, ForkNumber forkNum);
+Buffer		MyflatNewBuffer(Relation index, ForkNumber forkNum);
+void		MyflatInitPage(Buffer buf, Page page);
+void		MyflatInitRegisterPage(Relation index, Buffer *buf, Page *page, GenericXLogState **state);
+void		MyflatInit(void);
+void		MyflatTypeInfo *MyflatGetTypeInfo(Relation index);
 
 /* Index access methods */
 IndexBuildResult *myflatbuild(Relation heap, Relation index, IndexInfo *indexInfo);

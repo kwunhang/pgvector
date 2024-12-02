@@ -40,7 +40,7 @@
  * Add tuple to sort
  */
 static void
-AddTuple(Relation index, ItemPointer tid, Datum *values, IvfflatBuildState * buildstate)
+AddTuple(Relation index, ItemPointer tid, Datum *values, MyflatBuildState * buildstate)
 {
 
 	TupleTableSlot *slot = buildstate->slot;
@@ -293,7 +293,7 @@ CreateScanPages(Relation index, int dimensions,
 	scanSize = MAXALIGN(MYFLAT_SCAN_SIZE);
 	scan = palloc0(scanSize);
 
-	buf = IvfflatNewBuffer(index, forkNum);
+	buf = MyflatNewBuffer(index, forkNum);
 	MyflatInitRegisterPage(index, &buf, &page, &state);
 
 	int i = 0;
@@ -334,7 +334,7 @@ AssignTuples(MyflatBuildState * buildstate)
 	int			parallel_workers = 0;
 	SortCoordinate coordinate = NULL;
 
-	pgstat_progress_update_param(PROGRESS_CREATEIDX_SUBPHASE, PROGRESS_IVFFLAT_PHASE_ASSIGN);
+	pgstat_progress_update_param(PROGRESS_CREATEIDX_SUBPHASE, PROGRESS_MYFLAT_PHASE_LOAD);
 
 	/* Calculate parallel workers */
 	if (buildstate->heap != NULL)
@@ -367,9 +367,6 @@ AssignTuples(MyflatBuildState * buildstate)
 		buildstate->reltuples = table_index_build_scan(buildstate->heap, buildstate->index, buildstate->indexInfo,
 														   true, true, BuildCallback, (void *) buildstate, NULL);
 
-#ifdef IVFFLAT_KMEANS_DEBUG
-		PrintKmeansMetrics(buildstate);
-#endif
 	}
 }
 
@@ -379,20 +376,20 @@ AssignTuples(MyflatBuildState * buildstate)
  * Create entry pages
  */
 static void
-CreateEntryPages(IvfflatBuildState * buildstate, ForkNumber forkNum)
+CreateEntryPages(MyflatBuildState * buildstate, ForkNumber forkNum)
 {
 	/* Assign */
-	IvfflatBench("assign tuples", AssignTuples(buildstate));
+	MyflatBench("assign tuples", AssignTuples(buildstate));
 
 	/* Load */
-	IvfflatBench("load tuples", InsertTuples(buildstate->index, buildstate, forkNum));
+	MyflatBench("load tuples", InsertTuples(buildstate->index, buildstate, forkNum));
 
 	/* End sort */
 	tuplesort_end(buildstate->sortstate);
 
 	/* End parallel build */
-	if (buildstate->ivfleader)
-		IvfflatEndParallel(buildstate->ivfleader);
+	// if (buildstate->myflatleader)
+	// 	MyflatEndParallel(buildstate->ivfleader);
 }
 
 // TODO: Build the index (I think need to build the entry)

@@ -73,6 +73,7 @@ myflatcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 					double *indexPages)
 {
 	GenericCosts costs;
+	int			unused;
 	int			ramdom_ratio;
 	double		ratio;
 	// double		sequentialRatio = 0.5;

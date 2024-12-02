@@ -48,6 +48,8 @@ FindInsertPage(Relation index, Datum *values, BlockNumber *insertPage, ListInfo 
 
 			if (distance < minDistance || !BlockNumberIsValid(*insertPage))
 			{
+				/* the blkno (page number) and the offset number of the list info. Use blkno to get page. 
+				The page info with insert page, start page and center. Compare and update the listinfo. To let the program can access the listinfo later. */
 				*insertPage = list->insertPage;
 				listInfo->blkno = nextblkno;
 				listInfo->offno = offno;
