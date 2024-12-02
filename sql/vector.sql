@@ -916,3 +916,34 @@ CREATE OPERATOR CLASS sparsevec_l1_ops
 	OPERATOR 1 <+> (sparsevec, sparsevec) FOR ORDER BY float_ops,
 	FUNCTION 1 l1_distance(sparsevec, sparsevec),
 	FUNCTION 3 hnsw_sparsevec_support(internal);
+
+
+-- myflat index
+
+-- access methods
+CREATE FUNCTION myflathandler(internal) RETURNS index_am_handler
+    AS 'MODULE_PATHNAME' LANGUAGE C;
+
+CREATE ACCESS METHOD myflat TYPE INDEX HANDLER myflathandler;
+
+COMMENT ON ACCESS METHOD myflat IS 'myflat index access method';
+
+
+-- vector opclasses
+CREATE OPERATOR CLASS vector_l2_ops
+	DEFAULT FOR TYPE vector USING myflat AS
+	OPERATOR 1 <-> (vector, vector) FOR ORDER BY float_ops,
+	FUNCTION 1 vector_l2_squared_distance(vector, vector);
+
+CREATE OPERATOR CLASS vector_ip_ops
+	FOR TYPE vector USING myflat AS
+	OPERATOR 1 <#> (vector, vector) FOR ORDER BY float_ops,
+	FUNCTION 1 vector_negative_inner_product(vector, vector);
+
+CREATE OPERATOR CLASS vector_cosine_ops
+	FOR TYPE vector USING myflat AS
+	OPERATOR 1 <=> (vector, vector) FOR ORDER BY float_ops,
+	FUNCTION 1 vector_negative_inner_product(vector, vector),
+	FUNCTION 2 vector_norm(vector);
+
+-- halfvec opclasses
