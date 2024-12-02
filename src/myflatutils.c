@@ -205,3 +205,32 @@ MyflatUpdateScan(Relation index, ListInfo listInfo,
 }
 
 PGDLLEXPORT Datum l2_normalize(PG_FUNCTION_ARGS);
+
+
+static Size
+VectorItemSize(int dimensions)
+{
+	return VECTOR_SIZE(dimensions);
+}
+
+/*
+ * Get type info
+ */
+const		MyflatTypeInfo *
+MyflatGetTypeInfo(Relation index)
+{
+	FmgrInfo   *procinfo = MyflatOptionalProcInfo(index, MYFLAT_TYPE_INFO_PROC);
+
+	if (procinfo == NULL)
+	{
+		static const MyflatTypeInfo typeInfo = {
+			.maxDimensions = MYFLAT_MAX_DIM,
+			.normalize = l2_normalize,
+			.itemSize = VectorItemSize,
+		};
+
+		return (&typeInfo);
+	}
+	else
+		return (const MyflatTypeInfo *) DatumGetPointer(FunctionCall0Coll(procinfo, InvalidOid));
+}

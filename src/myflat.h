@@ -25,7 +25,7 @@
 /* Support functions */
 #define MYFLAT_DISTANCE_PROC 1
 #define MYFLAT_NORM_PROC 2
-#define MY_TYPE_INFO_PROC 3 /* for regconize bit, half vec, sparse vec */
+#define MYFLAT_TYPE_INFO_PROC 3 /* for regconize bit, half vec, sparse vec */
 
 #define MYFLAT_VERSION	1
 #define MYFLAT_MAGIC_NUMBER 0x2BCA1387
@@ -89,16 +89,16 @@ typedef struct ListInfo
 	OffsetNumber offno;
 }			ListInfo;
 
-// use in buildstate for parallel use
-// typedef struct MyflatLeader
-// {
-// 	ParallelContext *pcxt;
-// 	int			nparticipanttuplesorts;
-// 	MyflatShared *Myshared;
-// 	Sharedsort *sharedsort;
-// 	Snapshot	snapshot;
-// 	char	   *ivfcenters;
-// }			MyflatLeader;
+use in buildstate for parallel use
+typedef struct MyflatLeader
+{
+	ParallelContext *pcxt;
+	int			nparticipanttuplesorts;
+	MyflatShared *Myshared;
+	Sharedsort *sharedsort;
+	Snapshot	snapshot;
+	// char	   *ivfcenters;
+}			MyflatLeader;
 
 
 typedef struct MyflatTypeInfo
@@ -231,7 +231,7 @@ Buffer		MyflatNewBuffer(Relation index, ForkNumber forkNum);
 void		MyflatInitPage(Buffer buf, Page page);
 void		MyflatInitRegisterPage(Relation index, Buffer *buf, Page *page, GenericXLogState **state);
 void		MyflatInit(void);
-void		MyflatTypeInfo *MyflatGetTypeInfo(Relation index);
+const		MyflatTypeInfo *MyflatGetTypeInfo(Relation index);
 
 /* Index access methods */
 IndexBuildResult *myflatbuild(Relation heap, Relation index, IndexInfo *indexInfo);
