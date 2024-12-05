@@ -14,7 +14,23 @@
 
 
 #define GetScanList(ptr) pairingheap_container(MyflatScanList, ph_node, ptr)
+#define GetScanListConst(ptr) pairingheap_const_container(MyflatScanList, ph_node, ptr)
 
+
+/*
+ * Compare list distances
+ */
+static int
+CompareLists(const pairingheap_node *a, const pairingheap_node *b, void *arg)
+{
+	if (GetScanListConst(a)->distance > GetScanListConst(b)->distance)
+		return 1;
+
+	if (GetScanListConst(a)->distance < GetScanListConst(b)->distance)
+		return -1;
+
+	return 0;
+}
 
 /*
  * Get lists and sort by distance
@@ -29,13 +45,13 @@ GetScanLists(IndexScanDesc scan, Datum value)
 	{
 		Buffer		cbuf;
 		Page		cpage;
-		OffsetNumber maxoffno;
+		// OffsetNumber maxoffno;
 
         cbuf = ReadBuffer(scan->indexRelation, nextblkno);
 		LockBuffer(cbuf, BUFFER_LOCK_SHARE);
 		cpage = BufferGetPage(cbuf);
 
-		maxoffno = PageGetMaxOffsetNumber(cpage);
+		// maxoffno = PageGetMaxOffsetNumber(cpage);
 
         OffsetNumber offno = FirstOffsetNumber;
 
@@ -69,11 +85,11 @@ GetScanItems(IndexScanDesc scan, Datum value)
     MyflatScanOpaque so = (MyflatScanOpaque) scan->opaque;
     TupleDesc	tupdesc = RelationGetDescr(scan->indexRelation);
     TupleTableSlot *slot = so->vslot;
-    int			batchProbes = 0;
+	BlockNumber searchPage;
 
     tuplesort_reset(so->sortstate);
 
-    BlockNumber searchPage = so->listPages[0];
+    searchPage = so->listPages[0];
     /* Search all entry pages  */
     while (BlockNumberIsValid(searchPage))
     {
@@ -122,6 +138,15 @@ GetScanItems(IndexScanDesc scan, Datum value)
 // #if defined(MYFLAT_MEMORY)
 // 	elog(INFO, "memory: %zu MB", MemoryContextMemAllocated(CurrentMemoryContext, true) / (1024 * 1024));
 // #endif
+}
+
+/*
+ * Zero distance
+ */
+static Datum
+ZeroDistance(FmgrInfo *flinfo, Oid collation, Datum arg1, Datum arg2)
+{
+	return Float8GetDatum(0.0);
 }
 
 
@@ -185,14 +210,14 @@ myflatbeginscan(Relation index, int nkeys, int norderbys)
 {
     IndexScanDesc scan;
     MyflatScanOpaque so;
-    int			unused;
+    int			check;
 	int			dimensions;
 	MemoryContext oldCtx;
 
     scan = RelationGetIndexScan(index, nkeys, norderbys);
 
-    /* Get unused and dimensions from metapage */
-    MyflatGetMetaPageInfo(index, &unused, &dimensions);
+    /* Get check and dimensions from metapage */
+    MyflatGetMetaPageInfo(index, &check, &dimensions);
 
     so = (MyflatScanOpaque) palloc(sizeof(MyflatScanOpaqueData));
     so->typeInfo = MyflatGetTypeInfo(index);
@@ -233,7 +258,6 @@ myflatbeginscan(Relation index, int nkeys, int norderbys)
 // TODO: check usage of these
 	so->listQueue = pairingheap_allocate(CompareLists, scan);
 	so->listPages = palloc(sizeof(BlockNumber));
-	so->listIndex = 0;
 	so->lists = palloc(sizeof(MyflatScanList));
 // 
 
@@ -255,7 +279,6 @@ myflatrescan(IndexScanDesc scan, ScanKey keys, int nkeys, ScanKey orderbys, int 
 
     so->first = true;
     pairingheap_reset(so->listQueue);
-    so->listIndex = 0;
 
 	if (keys && scan->numberOfKeys > 0)
 		memmove(scan->keyData, keys, scan->numberOfKeys * sizeof(ScanKeyData));

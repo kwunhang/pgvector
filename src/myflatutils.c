@@ -11,15 +11,15 @@
 
 
 /*
- * Get the "unused" in the index
+ * Get the "check" in the index
  */
 int
-MyflatGetUnused(Relation index)
+MyflatGetCheck(Relation index)
 {
 	MyflatOptions *opts = (MyflatOptions *) index->rd_options;
 
 	if (opts)
-		return opts->unused;
+		return opts->check;
 
 	return MYFLAT_DEFAULT_RANDOM_RATIO;
 }
@@ -133,7 +133,7 @@ MyflatAppendPage(Relation index, Buffer *buf, Page *page, GenericXLogState **sta
  * Get the metapage info
  */
 void
-MyflatGetMetaPageInfo(Relation index, int *unused, int *dimensions)
+MyflatGetMetaPageInfo(Relation index, int *check, int *dimensions)
 {
 	Buffer		buf;
 	Page		page;
@@ -147,8 +147,8 @@ MyflatGetMetaPageInfo(Relation index, int *unused, int *dimensions)
 	if (unlikely(metap->magicNumber != MYFLAT_MAGIC_NUMBER))
 		elog(ERROR, "myflat index is not valid");
 
-	if (unused != NULL)
-		*unused = metap->unused;
+	if (check != NULL)
+		*check = metap->check;
 
 	if (dimensions != NULL)
 		*dimensions = metap->dimensions;
@@ -161,7 +161,8 @@ MyflatGetMetaPageInfo(Relation index, int *unused, int *dimensions)
 /*
  * Update the start or insert page of Scan
  */
-MyflatUpdateScan(Relation index, ListInfo listInfo,
+void
+MyflatUpdateScan(Relation index, ScanInfo listInfo,
 				  BlockNumber insertPage, BlockNumber originalInsertPage,
 				  BlockNumber startPage, ForkNumber forkNum)
 {

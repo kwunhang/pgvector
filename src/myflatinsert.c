@@ -13,19 +13,19 @@
  * Find the insert page
  */
 static void
-FindInsertPage(Relation index, Datum *values, BlockNumber *insertPage, ListInfo * listInfo)
+FindInsertPage(Relation index, Datum *values, BlockNumber *insertPage, ScanInfo * listInfo)
 {
-	double		minDistance = DBL_MAX;
+	// double		minDistance = DBL_MAX;
 	BlockNumber nextblkno = MYFLAT_HEAD_BLKNO;
-	FmgrInfo   *procinfo;
-	Oid			collation;
+	// FmgrInfo   *procinfo;
+	// Oid			collation;
 
 	/* Avoid compiler warning */
 	listInfo->blkno = nextblkno;
 	listInfo->offno = FirstOffsetNumber;
 
-	procinfo = index_getprocinfo(index, 1, MYFLAT_DISTANCE_PROC);
-	collation = index->rd_indcollation[0];
+	// procinfo = index_getprocinfo(index, 1, MYFLAT_DISTANCE_PROC);
+	// collation = index->rd_indcollation[0];
 
 	/* Search all list pages and get the list, here ListInfo expect just the list page with nearest center */
 	/* In Myflat, no need search since just one */
@@ -33,13 +33,15 @@ FindInsertPage(Relation index, Datum *values, BlockNumber *insertPage, ListInfo 
 	{
 		Buffer		cbuf;
 		Page		cpage;
-		OffsetNumber maxoffno;
+		OffsetNumber offno;
+		// OffsetNumber maxoffno;
 
 		cbuf = ReadBuffer(index, nextblkno);
 		LockBuffer(cbuf, BUFFER_LOCK_SHARE);
 		cpage = BufferGetPage(cbuf);
-		maxoffno = PageGetMaxOffsetNumber(cpage);
+		// maxoffno = PageGetMaxOffsetNumber(cpage);
 		
+		offno = FirstOffsetNumber;
 		MyflatScan scan;
 		scan = (MyflatScan) PageGetItem(cpage, PageGetItemId(cpage, listInfo->offno));
 
@@ -68,7 +70,7 @@ InsertTuple(Relation index, Datum *values, bool *isnull, ItemPointer heap_tid, R
 	GenericXLogState *state;
 	Size		itemsz;
 	BlockNumber insertPage = InvalidBlockNumber;
-	ListInfo	listInfo;
+	ScanInfo	listInfo;
 	BlockNumber originalInsertPage;
 
 	/* Detoast once for all calls */

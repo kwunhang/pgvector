@@ -29,9 +29,10 @@ myflatbulkdelete(IndexVacuumInfo *info, IndexBulkDeleteResult *stats,
         Buffer		cbuf;
 		Page		cpage;
 		OffsetNumber coffno;
-		OffsetNumber cmaxoffno;
+		// OffsetNumber cmaxoffno;
 		BlockNumber scanStartPage;
-		ListInfo	listInfo;
+		ScanInfo	listInfo;
+        MyflatScan  scan;
 
         cbuf = ReadBuffer(index, blkno);
 		LockBuffer(cbuf, BUFFER_LOCK_SHARE);
@@ -39,7 +40,7 @@ myflatbulkdelete(IndexVacuumInfo *info, IndexBulkDeleteResult *stats,
 
 		/* Get the start page of scan */
         coffno = FirstOffsetNumber;
-        MyflatScan scan = (MyflatScan) PageGetItem(cpage, PageGetItemId(cpage, coffno));
+        scan = (MyflatScan) PageGetItem(cpage, PageGetItemId(cpage, coffno));
         scanStartPage = scan->startPage;
 
         listInfo.blkno = blkno;

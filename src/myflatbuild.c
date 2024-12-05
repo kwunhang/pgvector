@@ -109,14 +109,14 @@ GetNextTuple(Tuplesortstate *sortstate, TupleDesc tupdesc, TupleTableSlot *slot,
 {
     if (tuplesort_gettupleslot(sortstate, true, false, slot, NULL))
     {
-		Datum       values;
+		Datum       value;
 		bool        isnull;
 
         /* Get vector from slot (second column) */
         value = slot_getattr(slot, 2, &isnull);
         
         /* Form the index tuple */
-        *itup = index_form_tuple(tupdesc, values, isnull);
+        *itup = index_form_tuple(tupdesc, &value, &isnull);
 		(*itup)->t_tid = *((ItemPointer) DatumGetPointer(slot_getattr(slot, 1, &isnull)));
     }
     else
@@ -142,16 +142,17 @@ InsertTuples(Relation index, MyflatBuildState * buildstate, ForkNumber forkNum)
 
     pgstat_progress_update_param(PROGRESS_CREATEIDX_TUPLES_TOTAL, buildstate->indtuples);
 
+    /* Get first tuple */
+    GetNextTuple(buildstate->sortstate, tupdesc, slot, &itup);
+
+	int i = 0;
+
     Buffer      buf;
     Page        page;
     GenericXLogState *state;
 	BlockNumber startPage;
 	BlockNumber insertPage;
 
-	int i = 0;
-
-    /* Get first tuple */
-    GetNextTuple(buildstate->sortstate, tupdesc, slot, &itup);
 
 	/* Can take a while, so ensure we can interrupt */
 	/* Needs to be called when no buffer locks are held */
@@ -207,7 +208,7 @@ InitBuildState(MyflatBuildState * buildstate, Relation heap, Relation index, Ind
 	buildstate->typeInfo = NULL;
 	buildstate->tupdesc = RelationGetDescr(index);
 
-	buildstate->unused = MyflatGetUnused(index);
+	buildstate->check = MyflatGetCheck(index);
 	buildstate->dimensions = TupleDescAttr(index->rd_att, 0)->atttypmod;
 
 	/* Disallow varbit since require fixed dimensions */
@@ -239,22 +240,32 @@ InitBuildState(MyflatBuildState * buildstate, Relation heap, Relation index, Ind
 	buildstate->slot = MakeSingleTupleTableSlot(buildstate->sortdesc, &TTSOpsVirtual);
 
 
-	buildstate->listInfo = palloc(sizeof(ListInfo));
+	buildstate->listInfo = palloc(sizeof(ScanInfo));
 
 	buildstate->tmpCtx = AllocSetContextCreate(CurrentMemoryContext,
 											   "Myflat build temporary context",
 											   ALLOCSET_DEFAULT_SIZES);
 
 
-	buildstate->myleader = NULL;
+	buildstate->myflatleader = NULL;
 }
 
+/*
+ * Free resources
+ */
+static void
+FreeBuildState(MyflatBuildState * buildstate)
+{
+	pfree(buildstate->listInfo);
+
+	MemoryContextDelete(buildstate->tmpCtx);
+}
 
 /*
  * Create the metapage
  */
 static void
-CreateMetaPage(Relation index, int dimensions, int unused, ForkNumber forkNum)
+CreateMetaPage(Relation index, int dimensions, int check, ForkNumber forkNum)
 {
 	Buffer		buf;
 	Page		page;
@@ -270,7 +281,7 @@ CreateMetaPage(Relation index, int dimensions, int unused, ForkNumber forkNum)
 	metap->magicNumber = MYFLAT_MAGIC_NUMBER;
 	metap->version = MYFLAT_VERSION;
 	metap->dimensions = dimensions;
-	metap->unused = unused;
+	metap->check = check;
 	((PageHeader) page)->pd_lower =
 		((char *) metap + sizeof(MyflatMetaPageData)) - (char *) page;
 	
@@ -282,7 +293,7 @@ CreateMetaPage(Relation index, int dimensions, int unused, ForkNumber forkNum)
  */
 static void
 CreateScanPages(Relation index, int dimensions,
-				int unused, ForkNumber forkNum, ListInfo * *listInfo)
+				int check, ForkNumber forkNum, ScanInfo * *listInfo)
 {
 	Buffer		buf;
 	Page		page;
@@ -290,14 +301,14 @@ CreateScanPages(Relation index, int dimensions,
 	Size		scanSize;
 	MyflatScan scan;
 
+	int i = 0;
+
 	scanSize = MAXALIGN(MYFLAT_SCAN_SIZE);
 	scan = palloc0(scanSize);
 
 	buf = MyflatNewBuffer(index, forkNum);
 	MyflatInitRegisterPage(index, &buf, &page, &state);
 
-	int i = 0;
-	
 	OffsetNumber offno;
 
 	/* Zero memory for scan */
@@ -326,6 +337,20 @@ CreateScanPages(Relation index, int dimensions,
 }
 
 /*
+ * Initialize build sort state
+ */
+static Tuplesortstate *
+InitBuildSortState(TupleDesc tupdesc, int memory, SortCoordinate coordinate)
+{
+	AttrNumber	attNums[] = {1};
+	Oid			sortOperators[] = {Int4LessOperator};
+	Oid			sortCollations[] = {InvalidOid};
+	bool		nullsFirstFlags[] = {false};
+
+	return tuplesort_begin_heap(tupdesc, 1, attNums, sortOperators, sortCollations, nullsFirstFlags, memory, coordinate, false);
+}
+
+/*
  * Scan table for tuples to index
  */
 static void
@@ -351,15 +376,17 @@ AssignTuples(MyflatBuildState * buildstate)
 
 	/* Begin serial/leader tuplesort */
 	/* Just for store the tuple */
-	buildstate->sortstate = tuplesort_begin_heap(buildstate->sortdesc,
-								0,     // no sort keys
-								NULL,  // no attribute numbers
-								NULL,  // no sort operators
-								NULL,  // no collations
-								NULL,  // no nullsFirst flags
-								maintenance_work_mem,
-								coordinate,  // no parallel coordination
-								false);// no random access needed
+	// buildstate->sortstate = tuplesort_begin_heap(buildstate->sortdesc,
+	// 							0,     // no sort keys
+	// 							NULL,  // no attribute numbers
+	// 							NULL,  // no sort operators
+	// 							NULL,  // no collations
+	// 							NULL,  // no nullsFirst flags
+	// 							maintenance_work_mem,
+	// 							coordinate,  // no parallel coordination
+	// 							false);// no random access needed
+	buildstate->sortstate = InitBuildSortState(buildstate->sortdesc, maintenance_work_mem, coordinate);
+
 
 	/* Add tuples to sort */
 	if (buildstate->heap != NULL)
@@ -405,8 +432,8 @@ BuildIndex(Relation heap, Relation index, IndexInfo *indexInfo,
 	InitBuildState(buildstate, heap, index, indexInfo);
 
 	/* Create pages */
-	CreateMetaPage(index, buildstate->dimensions, buildstate->unused, forkNum);
-	CreateScanPages(index, buildstate->dimensions, buildstate->unused, forkNum, buildstate->listInfo);
+	CreateMetaPage(index, buildstate->dimensions, buildstate->check, forkNum);
+	CreateScanPages(index, buildstate->dimensions, buildstate->check, forkNum, &buildstate->listInfo);
 	CreateEntryPages(buildstate, forkNum);
 
 	/* Write WAL for initialization fork since GenericXLog functions do not */

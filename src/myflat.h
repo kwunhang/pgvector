@@ -47,7 +47,7 @@
 #define MYFLAT_SCAN_SIZE	(sizeof(MyflatScanData) )
 
 #define MyflatPageGetOpaque(page)	((MyflatPageOpaque) PageGetSpecialPointer(page))
-#define MyflatPageGetMeta(page)		((MyflatMetaPage *) PageGetContents(page))
+#define MyflatPageGetMeta(page)		((MyflatMetaPageData *) PageGetContents(page))
 
 #ifdef MYFLAT_BENCH
 #define MyflatBench(name, code) \
@@ -79,22 +79,22 @@ typedef enum MyflatIterativeScanMode
 typedef struct MyflatOptions
 {
 	int32		vl_len_;		/* varlena header (do not touch directly!) */
-	int			unused;			/* unused variable */
+	int			check;			/* unused variable */
 }			MyflatOptions;
 
 
-typedef struct ListInfo
+typedef struct ScanInfo
 {
 	BlockNumber blkno;
 	OffsetNumber offno;
-}			ListInfo;
+}			ScanInfo;
 
-use in buildstate for parallel use
+// use in buildstate for parallel use
 typedef struct MyflatLeader
 {
 	ParallelContext *pcxt;
 	int			nparticipanttuplesorts;
-	MyflatShared *Myshared;
+	// MyflatShared *Myshared;
 	Sharedsort *sharedsort;
 	Snapshot	snapshot;
 	// char	   *ivfcenters;
@@ -119,7 +119,7 @@ typedef struct MyflatBuildState
 
 	/* Settings */
 	int			dimensions;
-	int			unused;
+	int			check;
 
 	/* Statistics */
 	double		indtuples;
@@ -134,7 +134,7 @@ typedef struct MyflatBuildState
 	/* Variables */
 	// VectorArray samples;
 	// VectorArray centers;
-	ListInfo   *listInfo;
+	ScanInfo   *listInfo;
 
 	/* Sampling */
 	// BlockSamplerData bs;
@@ -159,7 +159,7 @@ typedef struct MyflatMetaPageData
 	uint32		magicNumber;
 	uint32		version;
 	uint16		dimensions;
-	uint16		unused;
+	uint16		check;
 }			MyflatMetaPageData;
 
 typedef MyflatMetaPageData * MyflatMetaPage;
@@ -214,6 +214,7 @@ typedef struct MyflatScanOpaqueData
 	/* Lists */
 	pairingheap *listQueue;
 	BlockNumber *listPages;
+	MyflatScanList *lists;
 }			MyflatScanOpaqueData;
 
 typedef MyflatScanOpaqueData * MyflatScanOpaque;
@@ -222,9 +223,9 @@ typedef MyflatScanOpaqueData * MyflatScanOpaque;
 FmgrInfo 	*MyflatOptionalProcInfo(Relation index, uint16 procnum);
 Datum		MyflatNormValue(const MyflatTypeInfo * typeInfo, Oid collation, Datum value);
 bool 		MyflatCheckNorm(FmgrInfo *procinfo, Oid collation, Datum value);
-int			MyflatGetUnused(Relation index);
-void		MyflatGetMetaPageInfo(Relation index, int *unused, int *dimensions);
-void		MyflatUpdateScan(Relation index, ListInfo listInfo, BlockNumber insertPage, BlockNumber originalInsertPage, BlockNumber startPage, ForkNumber forkNum);
+int			MyflatGetCheck(Relation index);
+void		MyflatGetMetaPageInfo(Relation index, int *check, int *dimensions);
+void		MyflatUpdateScan(Relation index, ScanInfo listInfo, BlockNumber insertPage, BlockNumber originalInsertPage, BlockNumber startPage, ForkNumber forkNum);
 void		MyflatCommitBuffer(Buffer buf, GenericXLogState *state);
 void		MyflatAppendPage(Relation index, Buffer *buf, Page *page, GenericXLogState **state, ForkNumber forkNum);
 Buffer		MyflatNewBuffer(Relation index, ForkNumber forkNum);

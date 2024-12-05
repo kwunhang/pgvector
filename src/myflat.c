@@ -16,15 +16,16 @@
 #define MarkGUCPrefixReserved(x) EmitWarningsOnPlaceholders(x)
 #endif
 
-int			myflat_random_ratio;
-int         myflat_max_random_ratio;
-static relopt_kind myflat_relopt_kind;
-
 static const struct config_enum_entry myflat_iterative_scan_options[] = {
 	{"off", MYFLAT_ITERATIVE_SCAN_OFF, false},
 	{"relaxed_order", MYFLAT_ITERATIVE_SCAN_RELAXED, false},
 	{NULL, 0, false}
 };
+
+
+int			myflat_random_ratio;
+int         myflat_max_random_ratio;
+static relopt_kind myflat_relopt_kind;
 
 
 /*
@@ -35,7 +36,7 @@ MyflatInit(void)
 {
 	myflat_relopt_kind = add_reloption_kind();
 
-	add_int_reloption(myflat_relopt_kind, "unused", "Unused variable",
+	add_int_reloption(myflat_relopt_kind, "check", "Check variable",
 					  MYFLAT_DEFAULT_RANDOM_RATIO, MYFLAT_MIN_RANDOM_RATIO, MYFLAT_MAX_RANDOM_RATIO, AccessExclusiveLock);
 
 	DefineCustomIntVariable("myflat.random_ratio", "Sets the ratio of random pick",
@@ -73,8 +74,8 @@ myflatcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 					double *indexPages)
 {
 	GenericCosts costs;
-	int			unused;
-	int			ramdom_ratio;
+	int			check;
+	int			ramdom_ratio=1;
 	double		ratio;
 	// double		sequentialRatio = 0.5;
 	double		startupPages;
@@ -101,7 +102,7 @@ myflatcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	genericcostestimate(root, path, loop_count, &costs);
 
 	index = index_open(path->indexinfo->indexoid, NoLock);
-	MyflatGetMetaPageInfo(index, &lists, NULL);
+	MyflatGetMetaPageInfo(index, &check, NULL);
 	index_close(index, NoLock);
 
 	/* Get the ratio of lists that we need to visit */
@@ -137,7 +138,7 @@ static bytea *
 myflatoptions(Datum reloptions, bool validate)
 {
 	static const relopt_parse_elt tab[] = {
-		{"unused", RELOPT_TYPE_INT, offsetof(MyflatOptions, unused)},
+		{"check", RELOPT_TYPE_INT, offsetof(MyflatOptions, check)},
 	};
 
 	return (bytea *) build_reloptions(reloptions, validate,
