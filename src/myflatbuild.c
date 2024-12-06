@@ -55,12 +55,12 @@ AddTuple(Relation index, ItemPointer tid, Datum *values, MyflatBuildState * buil
     ExecClearTuple(slot);
     
     /* Store TID in first column */
-    slot->tts_values[0] = PointerGetDatum(tid);
-    slot->tts_isnull[0] = false;
-    
-    /* Store vector in second column */
-    slot->tts_values[1] = value;  // values contains the vector
-    slot->tts_isnull[1] = false;
+	slot->tts_values[0] = Int32GetDatum(0);
+	slot->tts_isnull[0] = false;
+    slot->tts_values[1] = PointerGetDatum(tid);
+	slot->tts_isnull[1] = false;
+	slot->tts_values[2] = value;
+	slot->tts_isnull[2] = false;
     
     ExecStoreVirtualTuple(slot);
 
@@ -113,11 +113,11 @@ GetNextTuple(Tuplesortstate *sortstate, TupleDesc tupdesc, TupleTableSlot *slot,
 		bool        isnull;
 
         /* Get vector from slot (second column) */
-        value = slot_getattr(slot, 2, &isnull);
+        value = slot_getattr(slot, 3, &isnull);
         
         /* Form the index tuple */
         *itup = index_form_tuple(tupdesc, &value, &isnull);
-		(*itup)->t_tid = *((ItemPointer) DatumGetPointer(slot_getattr(slot, 1, &isnull)));
+		(*itup)->t_tid = *((ItemPointer) DatumGetPointer(slot_getattr(slot, 2, &isnull)));
     }
     else
     {
@@ -232,9 +232,10 @@ InitBuildState(MyflatBuildState * buildstate, Relation heap, Relation index, Ind
 	buildstate->indtuples = 0;
 
 	// Create tuple description for sorting (no sorting and just for store in myflat)
-    buildstate->sortdesc = CreateTemplateTupleDesc(2);
-    TupleDescInitEntry(buildstate->sortdesc, (AttrNumber) 1, "tid", TIDOID, -1, 0);
-    TupleDescInitEntry(buildstate->sortdesc, (AttrNumber) 2, "vector", 
+    buildstate->sortdesc = CreateTemplateTupleDesc(3);
+	TupleDescInitEntry(buildstate->sortdesc, (AttrNumber) 1, "plain_list", INT4OID, -1, 0);
+    TupleDescInitEntry(buildstate->sortdesc, (AttrNumber) 2, "tid", TIDOID, -1, 0);
+    TupleDescInitEntry(buildstate->sortdesc, (AttrNumber) 3, "vector", 
                       buildstate->tupdesc->attrs[0].atttypid, -1, 0);
 
 	buildstate->slot = MakeSingleTupleTableSlot(buildstate->sortdesc, &TTSOpsVirtual);
@@ -407,6 +408,8 @@ CreateEntryPages(MyflatBuildState * buildstate, ForkNumber forkNum)
 {
 	/* Assign */
 	MyflatBench("assign tuples", AssignTuples(buildstate));
+
+	MyflatBench("sort tuples", tuplesort_performsort(buildstate->sortstate));
 
 	/* Load */
 	MyflatBench("load tuples", InsertTuples(buildstate->index, buildstate, forkNum));
